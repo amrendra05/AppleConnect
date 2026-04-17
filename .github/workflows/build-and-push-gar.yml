@@ -1,0 +1,62 @@
+name: Build and Push Docker Image to GAR
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  REGION: europe-west4
+  REPOSITORY: my-apps
+  IMAGE_NAME: apple-connector
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1️⃣ Checkout the code
+      - uses: actions/checkout@v4
+
+      # 2️⃣ Authenticate with GCP
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_DEV_SA_KEY }}
+
+      # 3️⃣ Set up gcloud CLI
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_DEV_PROJECT_ID }}
+
+      # 4️⃣ Configure Docker for GAR
+      - name: Configure Docker for GAR
+        run: gcloud auth configure-docker $REGION-docker.pkg.dev --quiet
+
+      # 5️⃣ Build Docker image
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t $REGION-docker.pkg.dev/${{ secrets.GCP_DEV_PROJECT_ID }}/$REPOSITORY/$IMAGE_NAME:${{ github.run_number }} \
+            .
+
+      # 6️⃣ Push Docker image to GAR
+      - name: Push Docker image
+        run: |
+          docker push $REGION-docker.pkg.dev/${{ secrets.GCP_DEV_PROJECT_ID }}/$REPOSITORY/$IMAGE_NAME:${{ github.run_number }}
+
+      - name: Create image name file
+        run: | 
+          IMAGE_REF=$REGION-docker.pkg.dev/${{ secrets.GCP_DEV_PROJECT_ID }}/$REPOSITORY/$IMAGE_NAME:${{ github.run_number }}
+          # Write to a text file
+          echo $IMAGE_REF > image-${{github.run_number}}.txt
+          # Write to a json file
+          cat <<EOF > image-${{github.run_number}}.json
+          {
+          "image": "$IMAGE_REF"
+          }
+          EOF
+      - name: Upload image to GCS
+        run: | 
+          #gsutil cp image-${{github.run_number}}.txt gs://cloud-build-bucket-gar/build-info/
+          #gsutil cp image-${{github.run_number}}.json gs://cloud-build-bucket-gar/build-info/
