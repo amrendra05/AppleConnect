@@ -3,7 +3,8 @@ import pickle
 import os
 
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from typing import Dict, Any
 from pyicloud import PyiCloudService
 from google.cloud import secretmanager
 
@@ -90,7 +91,7 @@ def list_tools():
 
 class ToolCall(BaseModel):
     name: str
-    arguments: dict = {}
+    arguments: Dict[str, Any] = Field(default_factory=dict)
 
 @app.post("/v1/tools/call")
 def call_tool(call: ToolCall):
