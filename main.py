@@ -20,7 +20,7 @@ app = FastAPI()
 
 PROJECT_ID = os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
 if not PROJECT_ID:
-    raise RuntimeError("GCP_PROJECT environment variable is not set")
+    raise RuntimeError("GCP_PROJECT or GOOGLE_CLOUD_PROJECT environment variable is not set")
 
 sm_client = secretmanager.SecretManagerServiceClient()
 
