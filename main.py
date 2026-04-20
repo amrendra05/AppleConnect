@@ -51,6 +51,7 @@ def icloud_photo_bridge(limit: int = 3):
     session_cookies = pickle.loads(cookie_bytes)
 
     api = PyiCloudService(email, password)
+    api.session.cookies.clear()
     api.session.cookies.update(session_cookies)
 
     if api.requires_2fa:
