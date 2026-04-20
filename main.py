@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from pyicloud import PyiCloudService
 from google.cloud import secretmanager
+import google.auth
 
 # -----------------------------
 # App
@@ -18,7 +19,7 @@ app = FastAPI()
 # Config
 # -----------------------------
 
-PROJECT_ID = secretmanager.SecretManagerServiceClient().project
+PROJECT_ID = google.auth.default()
 if not PROJECT_ID:
     raise RuntimeError("GCP_PROJECT or GOOGLE_CLOUD_PROJECT environment variable is not set")
 
