@@ -1,33 +1,40 @@
 import base64
 import pickle
 import os
+from typing import Dict, Any
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
-from typing import Dict, Any
 from pyicloud import PyiCloudService
 from google.cloud import secretmanager
 
 # -----------------------------
-# App + clients
+# App
 # -----------------------------
 
 app = FastAPI()
 
+# -----------------------------
+# Config
+# -----------------------------
+
+PROJECT_ID = os.getenv("GCP_PROJECT")
+if not PROJECT_ID:
+    raise RuntimeError("GCP_PROJECT environment variable is not set")
+
 sm_client = secretmanager.SecretManagerServiceClient()
-PROJECT_ID = os.environ.get("GCP_PROJECT")
 
 # -----------------------------
 # Helpers
 # -----------------------------
 
-def get_secret(secret_id):
+def get_secret(secret_id: str) -> str:
     name = f"projects/{PROJECT_ID}/secrets/{secret_id}/versions/latest"
     response = sm_client.access_secret_version(request={"name": name})
     return response.payload.data.decode("UTF-8")
 
 # -----------------------------
-# Your ORIGINAL business logic
+# Business Logic
 # -----------------------------
 
 def icloud_photo_bridge(limit: int = 3):
@@ -35,8 +42,11 @@ def icloud_photo_bridge(limit: int = 3):
     password = get_secret("icloud_password")
     base64_session = get_secret("icloud_session_token")
 
-    cookie_bytes = base64.b64decode(base64_session)
-    session_cookies = pickle.loads(cookie_bytes)
+    try:
+        cookie_bytes = base64.b64decode(base64_session)
+        session_cookies = pickle.loads(cookie_bytes)
+    except Exception:
+        raise Exception("Invalid iCloud session token")
 
     api = PyiCloudService(email, password)
     api.session.cookies.update(session_cookies)
@@ -61,47 +71,22 @@ def icloud_photo_bridge(limit: int = 3):
     return photos
 
 # -----------------------------
-# MCP: Tool discovery
-# -----------------------------
-
-@app.post("/v1/tools/list")
-def list_tools():
-    return {
-        "tools": [
-            {
-                "name": "icloud_photo_bridge",
-                "description": "Fetches the most recent iCloud photos using a trusted session",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "limit": {
-                            "type": "integer",
-                            "description": "Number of recent photos",
-                            "default": 3
-                        }
-                    }
-                }
-            }
-        ]
-    }
-
-# -----------------------------
-# MCP: Tool execution
+# MCP Models
 # -----------------------------
 
 class ToolCall(BaseModel):
     name: str
     arguments: Dict[str, Any] = Field(default_factory=dict)
 
-@app.post("/v1/tools/call")
-def call_tool(call: ToolCall):
+# -----------------------------
+# Tool execution (shared)
+# -----------------------------
+
+def execute_tool(call: ToolCall):
     if call.name != "icloud_photo_bridge":
         return {
             "content": [
-                {
-                    "type": "text",
-                    "text": f"Unknown tool: {call.name}"
-                }
+                {"type": "text", "text": f"Unknown tool: {call.name}"}
             ]
         }
 
@@ -131,9 +116,54 @@ def call_tool(call: ToolCall):
         }
 
 # -----------------------------
+# MCP Endpoints
+# -----------------------------
+
+# Tool discovery (manual / optional for Vertex)
+@app.post("/v1/tools/list")
+def list_tools():
+    return {
+        "tools": [
+            {
+                "name": "icloud_photo_bridge",
+                "description": "Fetches the most recent iCloud photos using a trusted session",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "limit": {
+                            "type": "integer",
+                            "description": "Number of recent photos",
+                            "default": 3
+                        }
+                    }
+                }
+            }
+        ]
+    }
+
+# Tool execution (manual)
+@app.post("/v1/tools/call")
+def call_tool(call: ToolCall):
+    return execute_tool(call)
+
+# Vertex MCP entrypoint (IMPORTANT)
+@app.post("/")
+def root(call: ToolCall):
+    return execute_tool(call)
+
+# Health check (useful for Cloud Run)
+@app.get("/")
+def health():
+    return {"status": "ok"}
+
+# -----------------------------
 # Local dev entrypoint
 # -----------------------------
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 8080))
+    )
