@@ -171,16 +171,12 @@ async def root(request: Request):
         photos = icloud_photo_bridge(limit)
 
         return {
-            "content": [
-                {"type": "json", "json": {"photos": photos}}
-            ]
+             "photos": photos
         }
 
     except Exception as e:
         return {
-            "content": [
-                {"type": "text", "text": f"Error: {str(e)}"}
-            ]
+           "error": str(e)
         }
 
 # Health check (useful for Cloud Run)
