@@ -4,6 +4,7 @@ import os
 from typing import Dict, Any
 
 from fastapi import FastAPI
+from fastapi import Request
 from pydantic import BaseModel, Field
 from pyicloud import PyiCloudService
 from google.cloud import secretmanager
@@ -149,8 +150,36 @@ def call_tool(call: ToolCall):
 
 # Vertex MCP entrypoint (IMPORTANT)
 @app.post("/")
-def root(call: ToolCall):
-    return execute_tool(call)
+async def root(request: Request):
+    body = await request.json()
+
+    # Try all common MCP shapes
+    name = body.get("name") or body.get("tool")
+    arguments = body.get("arguments") or body.get("params") or {}
+
+    if name != "icloud_photo_bridge":
+        return {
+            "content": [
+                {"type": "text", "text": f"Unknown tool: {name}"}
+            ]
+        }
+
+    try:
+        limit = arguments.get("limit", 3)
+        photos = icloud_photo_bridge(limit)
+
+        return {
+            "content": [
+                {"type": "json", "json": {"photos": photos}}
+            ]
+        }
+
+    except Exception as e:
+        return {
+            "content": [
+                {"type": "text", "text": f"Error: {str(e)}"}
+            ]
+        }
 
 # Health check (useful for Cloud Run)
 @app.get("/")
