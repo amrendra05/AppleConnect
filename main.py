@@ -39,13 +39,21 @@ def get_secret(secret_id: str) -> str:
     response = sm_client.access_secret_version(request={"name": name})
     return response.payload.data.decode("UTF-8")
 
+def get_binary_secret():
+    client = secretmanager.SecretManagerServiceClient()
+    name = "projects/YOUR_PROJECT_ID/secrets/icloud-session-token/versions/latest"
+    response = client.access_secret_version(request={"name": name})
+
+    # response.payload.data is already the raw cookie_bytes
+    cookie_bytes = response.payload.data
+    return pickle.loads(cookie_bytes)
 # -----------------------------
 # iCloud logic
 # -----------------------------
 def icloud_photo_bridge(limit: int = 3):
     email = get_secret("icloud_email")
     password = get_secret("icloud_password")
-    base64_session = get_secret("icloud_session_token")
+    base64_session = get_binary_secret("icoud-token-bin")
 
     cookie_bytes = base64.b64decode(base64_session)
     session_cookies = pickle.loads(cookie_bytes)
