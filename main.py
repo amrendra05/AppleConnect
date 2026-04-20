@@ -108,34 +108,66 @@ async def mcp_router(request: Request):
     logger.info(f"MCP: {body}")
 
     method = body.get("method")
+    msg_id = body.get("id")
 
-    # 1. INITIALIZE handshake
+    # -------------------------
+    # 1. INITIALIZE
+    # -------------------------
     if method == "initialize":
-       return {
-          "protocolVersion": body["params"]["protocolVersion"],
-          "capabilities": {
-             "tools": {}
-          },
-          "serverInfo": {
-             "name": "icloud-mcp",
-             "version": "1.0.0"
-          }
+        return {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": {
+                "protocolVersion": body["params"]["protocolVersion"],
+                "capabilities": {
+                    "tools": {}
+                },
+                "serverInfo": {
+                    "name": "icloud-mcp",
+                    "version": "1.0.0"
+                }
+            }
         }
 
-    # 2. LIST TOOLS
+    # -------------------------
+    # 2. TOOLS LIST
+    # -------------------------
     if method == "tools/list":
-        return {"tools": TOOLS}
+        return {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": {
+                "tools": TOOLS
+            }
+        }
 
-    # 3. CALL TOOL
+    # -------------------------
+    # 3. TOOL CALL
+    # -------------------------
     if method == "tools/call":
         params = body.get("params", {})
         name = params.get("name")
         args = params.get("arguments", {})
 
-        return execute_tool(name, args)
+        result = execute_tool(name, args)
 
-    return {"error": f"Unknown method: {method}"}
+        return {
+            "jsonrpc": "2.0",
+            "id": msg_id,
+            "result": result
+        }
 
+    # -------------------------
+    # fallback
+    # -------------------------
+    return {
+        "jsonrpc": "2.0",
+        "id": msg_id,
+        "error": {
+            "code": -32601,
+            "message": f"Unknown method: {method}"
+        }
+    }
 # -----------------------------
 # Health
 # -----------------------------
