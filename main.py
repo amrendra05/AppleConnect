@@ -145,8 +145,10 @@ def list_tools():
 
 # Tool execution (manual)
 @app.post("/v1/tools/call")
-def call_tool(call: ToolCall):
-    return execute_tool(call)
+async def call_tool(request: Request):
+    body = await request.json()
+    print("VERTEX TOOL CALL:", body)
+    return {"debug": body}
 
 # Vertex MCP entrypoint (IMPORTANT)
 @app.post("/")
