@@ -12,20 +12,17 @@ import google.auth
 # -----------------------------
 # Logging
 # -----------------------------
-
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("main")
 
 # -----------------------------
 # App
 # -----------------------------
-
 app = FastAPI()
 
 # -----------------------------
-# Config (Cloud Run safe)
+# Config
 # -----------------------------
-
 credentials, PROJECT_ID = google.auth.default()
 PROJECT_ID = PROJECT_ID or os.environ.get("GOOGLE_CLOUD_PROJECT")
 
@@ -37,16 +34,14 @@ sm_client = secretmanager.SecretManagerServiceClient()
 # -----------------------------
 # Secrets
 # -----------------------------
-
 def get_secret(secret_id: str) -> str:
     name = f"projects/{PROJECT_ID}/secrets/{secret_id}/versions/latest"
     response = sm_client.access_secret_version(request={"name": name})
     return response.payload.data.decode("UTF-8")
 
 # -----------------------------
-# Core logic
+# iCloud logic
 # -----------------------------
-
 def icloud_photo_bridge(limit: int = 3):
     email = get_secret("icloud_email")
     password = get_secret("icloud_password")
@@ -67,73 +62,83 @@ def icloud_photo_bridge(limit: int = 3):
             break
 
         photo_data = photo.download("medium").raw.read()
-        encoded_image = base64.b64encode(photo_data).decode("utf-8")
+        encoded = base64.b64encode(photo_data).decode("utf-8")
 
         photos.append({
             "filename": photo.filename,
-            "data": encoded_image,
+            "data": encoded,
             "mime_type": "image/jpeg"
         })
 
     return photos
 
 # -----------------------------
-# Tool execution
+# MCP TOOL DEFINITIONS
 # -----------------------------
+TOOLS = [
+    {
+        "name": "icloud_photo_bridge",
+        "description": "Fetch latest iCloud photos",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer"}
+            }
+        }
+    }
+]
 
+# -----------------------------
+# TOOL EXECUTION
+# -----------------------------
 def execute_tool(name: str, arguments: Dict[str, Any]):
-
     if name != "icloud_photo_bridge":
         return {"error": f"Unknown tool: {name}"}
 
-    try:
-        limit = arguments.get("limit", 3)
-        photos = icloud_photo_bridge(limit)
-        return {"photos": photos}
-
-    except Exception as e:
-        logger.exception("Tool execution failed")
-        return {"error": str(e)}
+    limit = arguments.get("limit", 3)
+    photos = icloud_photo_bridge(limit)
+    return {"photos": photos}
 
 # -----------------------------
-# Vertex entrypoint (IMPORTANT)
+# MCP: initialize (IMPORTANT)
 # -----------------------------
-
 @app.post("/")
-async def root(request: Request):
+async def mcp_router(request: Request):
+    body = await request.json()
+    logger.info(f"MCP: {body}")
 
-    try:
-        body = await request.json()
-    except Exception:
-        raw = (await request.body()).decode("utf-8")
-        logger.error(f"Invalid JSON received: {raw}")
-        return {"error": "invalid JSON"}
+    method = body.get("method")
 
-    logger.info(f"Vertex request: {body}")
+    # 1. INITIALIZE handshake
+    if method == "initialize":
+        return {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {
+                "tools": {}
+            },
+            "serverInfo": {
+                "name": "icloud-mcp",
+                "version": "1.0.0"
+            }
+        }
 
-    # Normalize Vertex tool formats
-    name = (
-        body.get("name")
-        or body.get("tool")
-        or (body.get("functionCall") or {}).get("name")
-    )
+    # 2. LIST TOOLS
+    if method == "tools/list":
+        return {"tools": TOOLS}
 
-    arguments = (
-        body.get("arguments")
-        or body.get("params")
-        or (body.get("functionCall") or {}).get("args")
-        or {}
-    )
+    # 3. CALL TOOL
+    if method == "tools/call":
+        params = body.get("params", {})
+        name = params.get("name")
+        args = params.get("arguments", {})
 
-    if not name:
-        return {"error": "missing tool name"}
+        return execute_tool(name, args)
 
-    return execute_tool(name, arguments)
+    return {"error": f"Unknown method: {method}"}
 
 # -----------------------------
-# Health check
+# Health
 # -----------------------------
-
 @app.get("/")
 def health():
     return {"status": "ok"}
@@ -141,7 +146,6 @@ def health():
 # -----------------------------
 # Local run
 # -----------------------------
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
