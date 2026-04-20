@@ -111,15 +111,15 @@ async def mcp_router(request: Request):
 
     # 1. INITIALIZE handshake
     if method == "initialize":
-        return {
-            "protocolVersion": "2025-11-25",
-            "capabilities": {
-                "tools": {}
-            },
-            "serverInfo": {
-                "name": "icloud-mcp",
-                "version": "1.0.0"
-            }
+       return {
+          "protocolVersion": body["params"]["protocolVersion"],
+          "capabilities": {
+             "tools": {}
+          },
+          "serverInfo": {
+             "name": "icloud-mcp",
+             "version": "1.0.0"
+          }
         }
 
     # 2. LIST TOOLS
